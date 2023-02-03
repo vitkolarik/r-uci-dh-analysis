@@ -1,0 +1,228 @@
+---
+title: "Do riders from Scottland have better results in rain?"
+author: "Vit Kolarik"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Introduction about downhill
+
+Downhill is a cycling discipline, where riders try to get down the track as fast as possible. They use full-suspension DH bikes with 29" wheels and usually 200 mm of front and rear travel. It's a very high-risk sport with high speeds on dangerous tracks with many rocks, roots, jumps, trees and much more. The best riders from the whole world compete in 'The Mercedes-Benz UCI Mountain Bike World Cup' which has several stops during the season in various bike parks all around Europe and North America. 
+
+Races are held no matter the weather. Sometimes it's hot, shiny and dusty, other times it can rain cats and dogs, and be muddy and slippery, but the race takes place anyway. During one race last season, it was raining heavily and one of the commentators said that rides from Scotland usually finish better in bad weather, because it rains a lot in Scotland and they are used to it. And this is the hypothesis I've decided to test.
+
+## Methodology
+
+World Cup results  
+These results were gathered from the official UCI page for the Men Elite category in the years 2021 and 2022. Then the data were cleaned, edited and joined into one table in MS Excel. Every nation that had at least one result in both dry and wet weather was included.
+The riders from The United Kingdom were divided into two groups - riders from Scotland (with shortcut Sct) and the rest of the UK - England, Wales, N. Ireland (together under shortcut Brt).
+<br>
+
+Rain  
+Data about rain in each country were obtained from the World Bank webpage for the year 2018. 
+<br>
+
+Determining conditions during race  
+There can be a whole spectrum of types of weather during the World Cup race ranging from desert dry to heavy rain. Therefore only two types of weather are used - wet and dry. Of course on the UCI webpage are no information about the weather during the race. The method to determine the weather was the following. I've watched a video of every winning run from each race. If the winner's jersey was clean at the end of the run the weather was determined as dry. If it was dirty the weather was determined as wet. 
+
+## World Cup results
+
+```{r, message=FALSE}
+library("DT") 
+uci_dh_data <- read.csv("https://raw.githubusercontent.com/vitkolarik/r-uci-dh-analysis/main/UCI_DH_data.csv", stringsAsFactors = TRUE)
+
+datatable(uci_dh_data,
+  filter = 'top',  
+  rownames = FALSE,
+  options = list(
+      order = list(list(5, 'asc')),  
+      columnDefs = list(list(className = 'dt-left', targets = '_all')),
+      pageLength = 10, 
+      autoWidth = FALSE, 
+      scrollX = TRUE, 
+      scrollCollapse = FALSE
+  ))
+```
+
+## Map of races in seasons 2021 and 2022
+
+```{r, message=FALSE}
+library(leaflet)
+library(sqldf)
+
+bikeparks_data_21 <- read.csv.sql("https://raw.githubusercontent.com/vitkolarik/r-uci-dh-analysis/main/UCI_DH_map.csv", 
+                                  sql = "select * from file where `Year` == 2021")
+
+bikeparks_data_22 <- read.csv.sql("https://raw.githubusercontent.com/vitkolarik/r-uci-dh-analysis/main/UCI_DH_map.csv", 
+                                  sql = "select * from file where `Year` == 2022")
+
+
+worldcup_map <- leaflet(width = "100%") %>% 
+  
+  setView(lng = -36.8406, lat = 43.9053, zoom = 3) %>%
+  
+  addTiles() %>%
+  
+  addAwesomeMarkers(
+    lng = bikeparks_data_21$Long, 
+    lat = bikeparks_data_21$Lat,
+    group = "Season 2021",
+    popup = paste(
+      "Bikepark: <a href=", bikeparks_data_21$Web, ">",bikeparks_data_21$Bikepark, "</a><br>",
+      "Winner: ", bikeparks_data_21$Winner, " (", bikeparks_data_21$Nationality, ")<br>",
+      "<a href=", bikeparks_data_21$Results, ">Race results</a><br>",
+      "Date: ", bikeparks_data_21$Date 
+    ),
+    label = paste(
+      bikeparks_data_21$Bikepark, "(", bikeparks_data_21$Date, ")"
+    ),
+    icon = awesomeIcons(
+      icon = 'ios-close',
+      iconColor = 'black',
+      library = 'ion',
+      markerColor = "green"
+    )
+  ) %>% 
+  
+  addAwesomeMarkers(
+    lng = bikeparks_data_22$Long, 
+    lat = bikeparks_data_22$Lat,
+    group = "Season 2022",
+    popup = paste(
+      "Bikepark: <a href=", bikeparks_data_22$Web, ">",bikeparks_data_22$Bikepark, "</a><br>",
+      "Winner: ", bikeparks_data_21$Winner, " (", bikeparks_data_21$Nationality, ")<br>",
+      "<a href=", bikeparks_data_22$Results, ">Race results</a><br>",
+      "Date: ", bikeparks_data_22$Date 
+    ),
+    label = paste(
+      bikeparks_data_22$Bikepark, "(", bikeparks_data_22$Date, ")"
+    ),
+    icon = awesomeIcons(
+      icon = 'ios-close',
+      iconColor = 'black',
+      library = 'ion',
+      markerColor = "red"
+    )
+  ) %>% 
+  
+  addLayersControl(
+    overlayGroups = c("Season 2021", "Season 2022"),
+    options = layersControlOptions(
+      collapsed = FALSE
+    )
+  )
+
+worldcup_map
+```
+
+## Rain precipitation (2018)
+
+```{r, message=FALSE}
+rain_data <- read.csv("https://raw.githubusercontent.com/vitkolarik/r-uci-dh-analysis/main/UCI_DH_avg_prec.csv")
+
+library(ggplot2)
+
+rain_graph <- ggplot(rain_data,
+       aes(y = avg_prec_mm, 
+           x = reorder(country, avg_prec_mm), 
+           fill = ifelse(country == "Scotland" | country == "Czechia" | country == "England, Wales, N. Ireland" | country == "EU average", "Highlighted", "Normal"))
+       ) +
+  geom_bar(stat = "identity", width = 0.9) +
+  geom_text(aes(label = avg_prec_mm), colour = "white", hjust = 1) +
+  scale_fill_manual(values = c("Highlighted" = "black", "Normal" = "orange")) +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  coord_flip(expand = FALSE)
+
+rain_graph
+```
+
+## Analysis - mean, median
+
+These numbers was calculated as a difference between mean (median) for dry and wet results for each nationality. 
+
+Change in results = Result Wet - Result Dry
+
+The lower the number (bigger negative) the bigger improvement in performance. The Scots were in positive numbers which means worse performance in wet conditions then in dry.
+
+```{r, message=FALSE}
+library("DT") 
+library("dplyr")
+uci_dh_data <- read.csv("https://raw.githubusercontent.com/vitkolarik/r-uci-dh-analysis/main/UCI_DH_data.csv")
+
+
+result_dry_tbl <- uci_dh_data %>% 
+  group_by(Nationality) %>%
+  filter(Weather == "Dry") %>% 
+  summarise(result_mean = mean(Result),
+            result_median = median(Result)) %>% 
+  as.data.frame()
+
+result_wet_tbl <- uci_dh_data %>% 
+  group_by(Nationality) %>%
+  filter(Weather == "Wet") %>% 
+  summarise(result_mean = mean(Result),
+            result_median = median(Result)) %>% 
+  as.data.frame()
+
+agr_tbl <- data.frame(
+  "Nationality" = result_wet_tbl$Nationality,
+  "Mean results dry" = round(result_dry_tbl$result_mean, 1),
+  "Mean results wet" = round(result_wet_tbl$result_mean, 1),
+  "Change mean" = round(result_wet_tbl$result_mean - result_dry_tbl$result_mean, 1),
+  "Median results dry" = round(result_dry_tbl$result_median, 1),
+  "Median results wet" = round(result_wet_tbl$result_median, 1),
+  "Results median" = round(result_wet_tbl$result_median - result_dry_tbl$result_median, 1)
+  )
+
+
+result_tbl <- datatable(agr_tbl,
+          rownames = FALSE,
+          colnames = c('Nationality', 'Mean results dry', 'Mean results wet', 'Change mean', 'Median results dry', 'Median results wet', 'Change median'),
+          options = list(
+            dom = 't',
+            order = list(list(3, 'asc')),
+            pageLength = 25, 
+            autoWidth = FALSE, 
+            scrollX = TRUE, 
+            scrollCollapse = FALSE
+          ))
+result_tbl
+```
+
+## Analysis - correlation
+
+The goal of this part of analysis is to find, if there even exists any correlation between he results achieved and the amount of rain in given country. 
+The "t-test" shows no significance between the mean result and amount of precipitation. The R^2 value is also very low (0.1575).
+
+```{r, message=FALSE}
+uci_dh_data_corr <- read.csv("https://raw.githubusercontent.com/vitkolarik/r-uci-dh-analysis/main/UCI_DH_data.csv")
+
+rain_data_corr <- read.csv("https://raw.githubusercontent.com/vitkolarik/r-uci-dh-analysis/main/UCI_DH_avg_prec_corr.csv")
+
+corr_tbl <- uci_dh_data_corr %>% 
+  group_by(Nationality) %>% 
+  summarise(result_mean = round(mean(Result), 1),
+            result_median = median(Result)) %>% 
+  as.data.frame()
+
+corr_tbl$rain <- rain_data_corr$avg_prec_mm %>% 
+  sort(decreasing = TRUE)
+
+corr_tbl2 <- corr_tbl[-1]
+corr_tbl3 <- corr_tbl2[-2]
+corr_tbl3 <- corr_tbl3 %>% relocate(rain, .before = result_mean)
+
+library("ggpubr")
+lmCorr = lm(result_mean~rain, data = corr_tbl3)
+plot(corr_tbl3, pch = 16, col = "blue")
+
+summary(lmCorr)
+abline(lmCorr, col = "red")
+```
+
+## Conclusion
+Based on this linear regression and the previous mean (median) test we can say that the statement "riders from Scotland usually finish better in bad weather" is not true. 
